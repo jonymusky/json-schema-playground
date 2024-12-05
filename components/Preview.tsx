@@ -58,7 +58,7 @@ export function Preview({ elements, onFileUpload }: PreviewProps) {
             <div className="space-y-2">
               {element.options?.map((option, optionIndex) => (
                 <div key={optionIndex} className="flex items-center space-x-2">
-                  <Checkbox id={`${element.name}-${optionIndex}`} {...commonProps} value={option.value} />
+                  <Checkbox {...commonProps} value={option.value} />
                   <Label htmlFor={`${element.name}-${optionIndex}`}>{option.label}</Label>
                 </div>
               ))}

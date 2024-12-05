@@ -5,9 +5,12 @@ import { DragDropContext } from "@hello-pangea/dnd"
 
 interface ProvidersProps {
   children: React.ReactNode
+  attribute?: string
+  defaultTheme?: string
+  enableSystem?: boolean
 }
 
-export function Providers({ children }: ProvidersProps) {
+export function Providers({ children, attribute, defaultTheme, enableSystem }: ProvidersProps) {
   const onDragEnd = (result: any) => {
     // Handle drag end logic here
     if (!result.destination) return
@@ -17,7 +20,7 @@ export function Providers({ children }: ProvidersProps) {
   }
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <ThemeProvider attribute={attribute} defaultTheme={defaultTheme} enableSystem={enableSystem}>
       <DragDropContext onDragEnd={onDragEnd}>
         {children}
       </DragDropContext>

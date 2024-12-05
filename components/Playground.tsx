@@ -115,25 +115,52 @@ export function Playground() {
 
   const handleImportSchema = (jsonSchema: JsonSchema, uiSchema: Record<string, any>) => {
     // Convert imported schema back to form elements
-    const newFormElements: FormElement[] = Object.entries(jsonSchema.properties).map(([name, prop]) => ({
-      type: prop.type === 'number' ? 'number' : 'string',
-      label: prop.title || name,
-      name,
-      placeholder: prop.description,
-      options: prop.enum?.map(value => ({ label: value, value })),
-      validation: {
-        required: jsonSchema.required?.includes(name),
-        minLength: prop.minLength,
-        maxLength: prop.maxLength,
-        min: prop.minimum,
-        max: prop.maximum,
-        pattern: prop.pattern,
-      },
-    }))
-
-    setFormElements(newFormElements)
-    setState(newFormElements)
-  }
+    const newFormElements: FormElement[] = Object.entries(jsonSchema.properties).map(([name, prop]: [string, any]) => {
+      // Map the type correctly
+      let formElementType: FormElement["type"];
+      switch (prop.type) {
+        case "string":
+          formElementType = uiSchema[name]?.["ui:widget"] === "textarea" ? "textarea" : "text";
+          break;
+        case "number":
+          formElementType = "number";
+          break;
+        case "boolean":
+          formElementType = "checkbox";
+          break;
+        case "array":
+          formElementType = "select";
+          break;
+        case "object":
+          formElementType = "file"; // Default to file for complex types (adjust as needed)
+          break;
+        default:
+          throw new Error(`Unsupported type: ${prop.type}`);
+      }
+  
+      return {
+        type: formElementType,
+        label: prop.title || name,
+        name,
+        placeholder: uiSchema[name]?.["ui:placeholder"] || undefined,
+        options: prop.enum
+          ? prop.enum.map((value: string) => ({ label: value, value }))
+          : undefined,
+        validation: {
+          required: jsonSchema.required?.includes(name) || false,
+          minLength: prop.minLength || undefined,
+          maxLength: prop.maxLength || undefined,
+          min: prop.minimum || undefined,
+          max: prop.maximum || undefined,
+          pattern: prop.pattern || undefined,
+        },
+      };
+    });
+  
+    // Update state with new form elements
+    setFormElements(newFormElements);
+    setState(newFormElements);
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, elementName: string) => {
     const file = event.target.files?.[0];
@@ -175,6 +202,7 @@ export function Playground() {
                     className="flex-1 p-4 bg-gray-50 overflow-y-auto"
                   >
                     <Canvas
+                      onDragEnd={handleDragEnd}
                       elements={formElements}
                       onElementUpdate={handleElementUpdate}
                       onElementDelete={handleElementDelete}
