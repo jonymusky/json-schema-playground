@@ -155,7 +155,7 @@ export function FormElementEditor({ element, index, onUpdate, onDelete }: FormEl
       } as any)
     }
   >
-    Autofocus
+    Required
   </Toggle>
 </div>
                   {(element.type === 'text' || element.type === 'textarea') && (
