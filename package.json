@@ -1,0 +1,55 @@
+{
+  "name": "json-schema-playground",
+  "version": "1.0.0",
+  "description": "Interactive playground for visually building and exporting JSON Schema forms. Features drag-and-drop elements, editable properties, validations, and live previews for seamless form creation.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "tailwind-dev": "npx tailwindcss -i ./app/globals.css -o ./app/globals-out.css --watch",
+    "deploy": "npm run export && gh-pages -d out && echo '' > out/.nojekyll && echo 'json-schema-playground.jonymusky.com' > out/CNAME && gh-pages -d out"
+
+  },
+  "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^1.4.0",
+    "@hello-pangea/dnd": "^16.6.0",
+    "@radix-ui/react-checkbox": "^1.1.2",
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-dropdown-menu": "^2.1.2",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-radio-group": "^1.2.1",
+    "@radix-ui/react-select": "^2.1.2",
+    "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-tabs": "^1.1.1",
+    "@radix-ui/react-toggle": "^1.1.0",
+    "@tailwindcss/forms": "^0.5.9",
+    "@tailwindcss/typography": "^0.5.15",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "lucide-react": "^0.344.0",
+    "next": "^14.0.0",
+    "next-themes": "^0.2.1",
+    "react": "^18.2.0",
+    "react-beautiful-dnd": "^13.1.1",
+    "react-dom": "^18.2.0",
+    "react-dropdown-menu": "^0.0.2",
+    "tailwind-merge": "^2.2.1",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5.0.0",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-beautiful-dnd": "^13.1.8",
+    "@types/react-dom": "^18.2.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^14.0.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "gh-pages": "^5.0.0"
+  }
+}
