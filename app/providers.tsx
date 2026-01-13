@@ -1,13 +1,10 @@
 "use client"
 
-import { ThemeProvider } from "next-themes"
+import { ThemeProvider, type ThemeProviderProps } from "next-themes"
 import { DragDropContext } from "@hello-pangea/dnd"
 
-interface ProvidersProps {
+interface ProvidersProps extends Omit<ThemeProviderProps, 'children'> {
   children: React.ReactNode
-  attribute?: string
-  defaultTheme?: string
-  enableSystem?: boolean
 }
 
 export function Providers({ children, attribute, defaultTheme, enableSystem }: ProvidersProps) {
