@@ -1,60 +1,53 @@
 import React from 'react'
-import { JsonSchema, UiSchema } from '@/types'
+import { Check, Copy, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Copy } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
+import { CodeBlock } from './CodeBlock'
 
 interface JsonSchemaViewerProps {
-  schema: JsonSchema
-  uiSchema: Record<string, UiSchema>
-  onImport: () => void
+  label: string
+  value: unknown
+  fileName: string
+  description: React.ReactNode
 }
 
-export function JsonSchemaViewer({ schema, uiSchema, onImport }: JsonSchemaViewerProps) {
+export function JsonSchemaViewer({ label, value, fileName, description }: JsonSchemaViewerProps) {
   const { toast } = useToast()
+  const [copied, setCopied] = React.useState(false)
+  const json = JSON.stringify(value, null, 2)
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      toast({
-        title: "Copied!",
-        description: `${label} has been copied to clipboard.`,
-      })
-    }).catch((err) => {
-      console.error('Failed to copy: ', err)
-      toast({
-        title: "Error",
-        description: "Failed to copy to clipboard.",
-        variant: "destructive",
-      })
-    })
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(json)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      toast({ title: 'Couldn’t copy', description: 'Your browser blocked clipboard access. Select the text and copy it manually.', variant: 'destructive' })
+    }
+  }
+
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([json + '\n'], { type: 'application/json' }))
+    const link = Object.assign(document.createElement('a'), { href: url, download: fileName })
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">JSON Schema</h2>
-        <Button onClick={() => copyToClipboard(JSON.stringify(schema, null, 2), "JSON Schema")}>
-          <Copy className="mr-2 h-4 w-4" /> Copy JSON Schema
-        </Button>
+    <div className="space-y-3 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-prose text-sm text-muted-foreground">{description}</p>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={copy}>
+            {copied ? <Check className="mr-1.5 h-4 w-4 text-primary" /> : <Copy className="mr-1.5 h-4 w-4" />}
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={download}>
+            <Download className="mr-1.5 h-4 w-4" /> Download
+          </Button>
+        </div>
       </div>
-      <pre className="bg-gray-100 p-4 rounded-md overflow-auto">
-        {JSON.stringify(schema, null, 2)}
-      </pre>
-
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">UI Schema</h2>
-        <Button onClick={() => copyToClipboard(JSON.stringify(uiSchema, null, 2), "UI Schema")}>
-          <Copy className="mr-2 h-4 w-4" /> Copy UI Schema
-        </Button>
-      </div>
-      <pre className="bg-gray-100 p-4 rounded-md overflow-auto">
-        {JSON.stringify(uiSchema, null, 2)}
-      </pre>
-
-      <div className="flex justify-end">
-        <Button onClick={onImport}>Import Schema</Button>
-      </div>
+      <CodeBlock value={value} label={label} />
     </div>
   )
 }
-
