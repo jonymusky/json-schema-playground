@@ -1,236 +1,284 @@
 "use client"
 
-import React, { useState } from 'react'
-import { DragDropContext, DropResult, Droppable } from '@hello-pangea/dnd';
-import { Sidebar } from './Sidebar'
-import { Canvas } from './Canvas'
-import { Preview } from './Preview'
-import { JsonSchemaViewer } from './JsonSchemaViewer'
-import { ImportSchemaDialog } from './ImportSchemaDialog'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { DragDropContext, DropResult } from '@hello-pangea/dnd'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Button } from '@/components/ui/button'
-import { Undo2, Redo2 } from 'lucide-react'
+import { useToast } from '@/components/ui/use-toast'
 import { useUndo } from '@/hooks/useUndo'
-import { FormElement, JsonSchema, UiSchema } from '@/types'
-import { DarkModeToggle } from './DarkModeToggle'
+import { createElement, duplicateElement } from '@/lib/fields'
+import { ImportResult, toJsonSchema, toUiSchema } from '@/lib/schema'
+import { buildShareUrl, decodeState, readSharedHash } from '@/lib/share'
+import { EMPTY_FORM, TEMPLATES } from '@/lib/templates'
+import { FieldType, FormElement, FormMeta, FormState } from '@/types'
+import { Canvas, CANVAS_DROPPABLE } from './Canvas'
+import { Footer } from './Footer'
+import { Header } from './Header'
+import { ImportSchemaDialog } from './ImportSchemaDialog'
+import { JsonSchemaViewer } from './JsonSchemaViewer'
+import { Palette, PALETTE_DROPPABLE } from './Palette'
+import { Preview } from './Preview'
+
+const STORAGE_KEY = 'json-schema-playground:v2'
+
+const isFormState = (value: unknown): value is FormState =>
+  Boolean(value) && typeof value === 'object' && Array.isArray((value as FormState).elements) && typeof (value as FormState).meta === 'object'
+
+const isEditable = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+
+const slugify = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'form'
 
 export function Playground() {
-  const [formElements, setFormElements] = useState<FormElement[]>([])
-  const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'json'>('editor')
-  const { state, setState, canUndo, canRedo, undo, redo } = useUndo<FormElement[]>([])
+  const { state: form, setState, resetState, canUndo, canRedo, undo, redo } = useUndo<FormState>(EMPTY_FORM)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
+  // Bumped whenever the whole form is replaced, so the preview starts with fresh data.
+  const [formKey, setFormKey] = useState(0)
+  const scrollTarget = useRef<string | null>(null)
+  const { toast } = useToast()
+
+  // Restore from a shared link first, then from the last session.
+  useEffect(() => {
+    const restore = async () => {
+      const shared = readSharedHash()
+      if (shared) {
+        try {
+          const state = await decodeState(shared)
+          if (isFormState(state)) {
+            resetState(state)
+            toast({ title: 'Shared form loaded', description: 'Edits stay in your browser until you share again.' })
+          }
+        } catch {
+          toast({ title: 'Couldn’t open the shared link', description: 'The link looks incomplete. Ask for a fresh one.', variant: 'destructive' })
+        }
+        window.history.replaceState(null, '', window.location.pathname + window.location.search)
+        return
+      }
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
+        if (isFormState(saved)) resetState(saved)
+      } catch {
+        // Ignore unreadable storage and start empty.
+      }
+    }
+    restore().finally(() => setHydrated(true))
+  }, [resetState, toast])
+
+  useEffect(() => {
+    if (!hydrated) return
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(form))
+    } catch {
+      // Storage can be full or blocked; autosave is best effort.
+    }
+  }, [form, hydrated])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || isEditable(event.target)) return
+      const key = event.key.toLowerCase()
+      if (key === 'z' && !event.shiftKey) {
+        event.preventDefault()
+        undo()
+      } else if ((key === 'z' && event.shiftKey) || key === 'y') {
+        event.preventDefault()
+        redo()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [undo, redo])
+
+  useEffect(() => {
+    if (!scrollTarget.current) return
+    document.getElementById(`field-${scrollTarget.current}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    scrollTarget.current = null
+  })
+
+  const schema = useMemo(() => toJsonSchema(form), [form])
+  const uiSchema = useMemo(() => toUiSchema(form), [form])
+
+  const nameErrors = useMemo(() => {
+    const errors: Record<string, string> = {}
+    const counts = new Map<string, number>()
+    form.elements.forEach((element) => counts.set(element.name, (counts.get(element.name) ?? 0) + 1))
+    for (const element of form.elements) {
+      if (!element.name) errors[element.id] = 'A field name is required.'
+      else if ((counts.get(element.name) ?? 0) > 1) errors[element.id] = 'Another field already uses this name.'
+    }
+    return errors
+  }, [form.elements])
+
+  const setElements = useCallback(
+    (elements: FormElement[], key?: string) => setState({ ...form, elements }, key),
+    [form, setState]
+  )
+
+  const addElement = (type: FieldType, index = form.elements.length) => {
+    const element = createElement(type, form.elements.map((e) => e.name))
+    const elements = [...form.elements]
+    elements.splice(index, 0, element)
+    setElements(elements)
+    setSelectedId(element.id)
+    scrollTarget.current = element.id
+  }
 
   const handleDragEnd = (result: DropResult) => {
-    if (!result.destination) {
+    const { source, destination, draggableId } = result
+    if (!destination || destination.droppableId !== CANVAS_DROPPABLE) return
+
+    if (source.droppableId === PALETTE_DROPPABLE) {
+      addElement(draggableId.replace('palette:', '') as FieldType, destination.index)
       return
     }
-
-    const newElements = Array.from(formElements)
-    const [reorderedItem] = newElements.splice(result.source.index, 1)
-    newElements.splice(result.destination.index, 0, reorderedItem)
-
-    setFormElements(newElements)
-    setState(newElements)
+    if (source.index === destination.index) return
+    const elements = [...form.elements]
+    const [moved] = elements.splice(source.index, 1)
+    elements.splice(destination.index, 0, moved)
+    setElements(elements)
   }
 
-  const handleElementAdd = (element: FormElement) => {
-    const newElements = [...formElements, element]
-    setFormElements(newElements)
-    setState(newElements)
+  const updateElement = (updated: FormElement, key?: string) =>
+    setElements(form.elements.map((element) => (element.id === updated.id ? updated : element)), key)
+
+  const duplicate = (id: string) => {
+    const index = form.elements.findIndex((element) => element.id === id)
+    const copy = duplicateElement(form.elements[index], form.elements.map((e) => e.name))
+    const elements = [...form.elements]
+    elements.splice(index + 1, 0, copy)
+    setElements(elements)
+    setSelectedId(copy.id)
+    scrollTarget.current = copy.id
   }
 
-  const handleElementUpdate = (index: number, updatedElement: FormElement) => {
-    const newElements = [...formElements]
-    newElements[index] = updatedElement
-    setFormElements(newElements)
-    setState(newElements)
+  const remove = (id: string) => {
+    setElements(form.elements.filter((element) => element.id !== id))
+    if (selectedId === id) setSelectedId(null)
   }
 
-  const handleElementDelete = (index: number) => {
-    const newElements = formElements.filter((_, i) => i !== index)
-    setFormElements(newElements)
-    setState(newElements)
+  const loadTemplate = (templateId: string) => {
+    const template = TEMPLATES.find((t) => t.id === templateId)
+    if (!template) return
+    setState(template.create())
+    setFormKey((key) => key + 1)
+    setSelectedId(null)
+    toast({ title: `Loaded “${template.name}”`, description: 'Press Undo to get your previous form back.' })
   }
 
-  const generateJsonSchema = (): JsonSchema => {
-    const properties: JsonSchema['properties'] = {}
-    const required: string[] = []
-
-    formElements.forEach((element) => {
-      const property: JsonSchema['properties'][string] = {
-        type: element.type === 'number' ? 'number' : 'string',
-        title: element.label,
-      }
-
-      if (element.placeholder) {
-        property.description = element.placeholder
-      }
-
-      if (element.type === 'select' || element.type === 'radio' || element.type === 'checkbox') {
-        property.enum = element.options?.map((option) => option.value)
-      }
-
-      if (element.validation) {
-        if (element.validation.required) {
-          required.push(element.name)
-        }
-        if (element.validation.minLength !== undefined) {
-          property.minLength = element.validation.minLength
-        }
-        if (element.validation.maxLength !== undefined) {
-          property.maxLength = element.validation.maxLength
-        }
-        if (element.validation.min !== undefined) {
-          property.minimum = element.validation.min
-        }
-        if (element.validation.max !== undefined) {
-          property.maximum = element.validation.max
-        }
-        if (element.validation.pattern) {
-          property.pattern = element.validation.pattern
-        }
-      }
-
-      properties[element.name] = property
+  const handleImport = ({ state, skipped }: ImportResult) => {
+    setState(state)
+    setFormKey((key) => key + 1)
+    setSelectedId(null)
+    toast({
+      title: `Imported ${state.elements.length} ${state.elements.length === 1 ? 'field' : 'fields'}`,
+      description: skipped.length
+        ? `Skipped unsupported properties: ${skipped.join(', ')}.`
+        : 'Press Undo to get your previous form back.',
     })
+  }
 
-    return {
-      type: 'object',
-      properties,
-      required: required.length > 0 ? required : undefined,
+  const clear = () => {
+    setState(EMPTY_FORM)
+    setFormKey((key) => key + 1)
+    setSelectedId(null)
+    toast({ title: 'Form cleared', description: 'Press Undo to bring it back.' })
+  }
+
+  const share = async () => {
+    try {
+      const url = await buildShareUrl(form)
+      await navigator.clipboard.writeText(url)
+      toast({ title: 'Link copied', description: 'Anyone with the link opens a copy of this form.' })
+    } catch {
+      toast({ title: 'Couldn’t copy the link', description: 'Your browser blocked clipboard access.', variant: 'destructive' })
     }
   }
 
-  const generateUiSchema = () => {
-    const uiSchema: Record<string, UiSchema> = {}
-
-    formElements.forEach((element) => {
-      if (element.uiSchema) {
-        uiSchema[element.name] = { ...element.uiSchema }
-      }
-    })
-
-    return uiSchema
-  }
-
-  const handleImportSchema = (jsonSchema: JsonSchema, uiSchema: Record<string, any>) => {
-    // Convert imported schema back to form elements
-    const newFormElements: FormElement[] = Object.entries(jsonSchema.properties).map(([name, prop]: [string, any]) => {
-      // Map the type correctly
-      let formElementType: FormElement["type"];
-      switch (prop.type) {
-        case "string":
-          formElementType = uiSchema[name]?.["ui:widget"] === "textarea" ? "textarea" : "text";
-          break;
-        case "number":
-          formElementType = "number";
-          break;
-        case "boolean":
-          formElementType = "checkbox";
-          break;
-        case "array":
-          formElementType = "select";
-          break;
-        case "object":
-          formElementType = "file"; // Default to file for complex types (adjust as needed)
-          break;
-        default:
-          throw new Error(`Unsupported type: ${prop.type}`);
-      }
-  
-      return {
-        type: formElementType,
-        label: prop.title || name,
-        name,
-        placeholder: uiSchema[name]?.["ui:placeholder"] || undefined,
-        options: prop.enum
-          ? prop.enum.map((value: string) => ({ label: value, value }))
-          : undefined,
-        validation: {
-          required: jsonSchema.required?.includes(name) || false,
-          minLength: prop.minLength || undefined,
-          maxLength: prop.maxLength || undefined,
-          min: prop.minimum || undefined,
-          max: prop.maximum || undefined,
-          pattern: prop.pattern || undefined,
-        },
-      };
-    });
-  
-    // Update state with new form elements
-    setFormElements(newFormElements);
-    setState(newFormElements);
-  };
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, elementName: string) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      console.log(`File uploaded for ${elementName}:`, file.name);
-      // Here you would typically handle the file, e.g., send it to a server
-    }
-  };
+  const fileBase = slugify(form.meta.title)
 
   return (
-    <div className="flex h-screen">
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <Sidebar onElementAdd={handleElementAdd} />
-        <div className="flex-1 flex flex-col">
-          <div className="flex justify-between items-center p-4 border-b">
-            <h1 className="text-2xl font-bold">JSON Schema Form Playground</h1>
-            <div className="flex space-x-2 items-center">
-              <Button onClick={undo} disabled={!canUndo} size="icon">
-                <Undo2 className="h-4 w-4" />
-              </Button>
-              <Button onClick={redo} disabled={!canRedo} size="icon">
-                <Redo2 className="h-4 w-4" />
-              </Button>
-              <DarkModeToggle />
+    <div className="flex min-h-dvh flex-col lg:h-dvh">
+      <Header
+        canUndo={canUndo}
+        canRedo={canRedo}
+        canClear={form.elements.length > 0 || Boolean(form.meta.title || form.meta.description)}
+        onUndo={undo}
+        onRedo={redo}
+        onTemplate={loadTemplate}
+        onImport={() => setIsImportDialogOpen(true)}
+        onShare={share}
+        onClear={clear}
+      />
+
+      <div className="flex flex-1 flex-col lg:min-h-0 lg:flex-row">
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Palette onAdd={(type) => addElement(type)} />
+          <main className="canvas-surface flex-1 lg:min-h-0 lg:overflow-y-auto">
+            <Canvas
+              meta={form.meta}
+              elements={form.elements}
+              hydrated={hydrated}
+              selectedId={selectedId}
+              nameErrors={nameErrors}
+              onSelect={setSelectedId}
+              onMetaChange={(meta: FormMeta, key: string) => setState({ ...form, meta }, key)}
+              onElementUpdate={updateElement}
+              onElementDuplicate={duplicate}
+              onElementDelete={remove}
+              onTemplate={loadTemplate}
+            />
+          </main>
+        </DragDropContext>
+
+        <aside aria-label="Output" className="flex flex-col border-t bg-background lg:min-h-0 lg:w-[42%] lg:max-w-[640px] lg:border-l lg:border-t-0">
+          <Tabs defaultValue="preview" className="flex flex-1 flex-col lg:min-h-0">
+            <div className="shrink-0 border-b px-4 py-2">
+              <TabsList className="h-9">
+                <TabsTrigger value="preview">Preview</TabsTrigger>
+                <TabsTrigger value="schema">JSON Schema</TabsTrigger>
+                <TabsTrigger value="ui">UI Schema</TabsTrigger>
+              </TabsList>
             </div>
-          </div>
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="flex-1">
-            <TabsList>
-              <TabsTrigger value="editor">Editor</TabsTrigger>
-              <TabsTrigger value="preview">Preview</TabsTrigger>
-              <TabsTrigger value="json">JSON Schema</TabsTrigger>
-            </TabsList>
-            <TabsContent value="editor" className="flex-1">
-              <Droppable droppableId="canvas">
-                {(provided) => (
-                  <div
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                    className="flex-1 p-4 bg-gray-50 overflow-y-auto"
-                  >
-                    <Canvas
-                      onDragEnd={handleDragEnd}
-                      elements={formElements}
-                      onElementUpdate={handleElementUpdate}
-                      onElementDelete={handleElementDelete}
-                    />
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
+            <TabsContent value="preview" className="mt-0 flex-1 lg:min-h-0 lg:overflow-y-auto">
+              <Preview key={formKey} form={form} schema={schema} />
             </TabsContent>
-            <TabsContent value="preview" className="flex-1">
-              <Preview elements={formElements} onFileUpload={handleFileUpload} />
+            <TabsContent value="schema" className="mt-0 flex-1 lg:min-h-0 lg:overflow-y-auto">
+              <JsonSchemaViewer
+                label="JSON Schema"
+                value={schema}
+                fileName={`${fileBase}.schema.json`}
+                description="Describes the data. Validate submissions with any JSON Schema validator."
+              />
             </TabsContent>
-            <TabsContent value="json" className="flex-1">
-              <JsonSchemaViewer 
-                schema={generateJsonSchema()} 
-                uiSchema={generateUiSchema()}
-                onImport={() => setIsImportDialogOpen(true)}
+            <TabsContent value="ui" className="mt-0 flex-1 lg:min-h-0 lg:overflow-y-auto">
+              <JsonSchemaViewer
+                label="UI Schema"
+                value={uiSchema}
+                fileName={`${fileBase}.uischema.json`}
+                description={
+                  <>
+                    Controls widgets, order and hints. Works with{' '}
+                    <a
+                      href="https://rjsf-team.github.io/react-jsonschema-form/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline underline-offset-4"
+                    >
+                      react-jsonschema-form
+                    </a>
+                    .
+                  </>
+                }
               />
             </TabsContent>
           </Tabs>
-        </div>
-      </DragDropContext>
-      <ImportSchemaDialog
-        isOpen={isImportDialogOpen}
-        onClose={() => setIsImportDialogOpen(false)}
-        onImport={handleImportSchema}
-      />
+        </aside>
+      </div>
+
+      <Footer />
+
+      <ImportSchemaDialog isOpen={isImportDialogOpen} onClose={() => setIsImportDialogOpen(false)} onImport={handleImport} />
     </div>
   )
 }
-

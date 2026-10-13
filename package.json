@@ -1,20 +1,16 @@
 {
   "name": "json-schema-playground",
-  "version": "1.0.0",
-  "description": "Interactive playground for visually building and exporting JSON Schema forms. Features drag-and-drop elements, editable properties, validations, and live previews for seamless form creation.",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "Visual builder for JSON Schema (draft 2020-12) forms with RJSF-compatible UI Schema, live validated preview, templates, import/export and shareable links.",
   "scripts": {
     "dev": "next dev",
     "build": "next build && echo '' > out/.nojekyll && echo 'json-schema-playground.jonymusky.com' > out/CNAME",
-    "start": "next start",
-    "lint": "next lint",
-    "export": "next build && next export",
-    "tailwind-dev": "npx tailwindcss -i ./app/globals.css -o ./app/globals-out.css --watch",
-    "deploy": "npm run export && gh-pages -d out && echo '' > out/.nojekyll && echo 'json-schema-playground.jonymusky.com' > out/CNAME && gh-pages -d out"
-
+    "start": "npx serve out",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && gh-pages -d out --dotfiles"
   },
   "dependencies": {
-    "@atlaskit/pragmatic-drag-and-drop": "^1.7.9",
     "@hello-pangea/dnd": "^18.0.1",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -23,10 +19,12 @@
     "@radix-ui/react-radio-group": "^1.3.8",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-switch": "^1.4.1",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toggle": "^1.1.10",
     "@tailwindcss/forms": "^0.5.11",
-    "@tailwindcss/typography": "^0.5.19",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.577.0",
@@ -34,11 +32,9 @@
     "next-themes": "^0.4.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-dropdown-menu": "^0.0.2",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.9.3",
-    "zustand": "^5.0.12"
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
@@ -46,9 +42,13 @@
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^15.0.0",
+    "eslint-config-next": "^16.4.0",
+    "gh-pages": "^6.3.0",
     "postcss": "^8.5.8",
-    "tailwindcss": "^3.4.16",
-    "gh-pages": "^6.3.0"
+    "tailwindcss": "^3.4.16"
+  },
+  "author": "Jonathan Muszkat <https://me.jonymusky.com>",
+  "engines": {
+    "node": ">=20.9"
   }
 }

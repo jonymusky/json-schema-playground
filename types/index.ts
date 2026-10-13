@@ -1,3 +1,25 @@
+export type FieldType =
+  | 'text'
+  | 'textarea'
+  | 'email'
+  | 'url'
+  | 'password'
+  | 'tel'
+  | 'number'
+  | 'integer'
+  | 'range'
+  | 'boolean'
+  | 'select'
+  | 'radio'
+  | 'checkboxes'
+  | 'date'
+  | 'time'
+  | 'datetime'
+  | 'color'
+  | 'file'
+
+export type FieldValue = string | number | boolean | string[]
+
 export interface FormElementOption {
   label: string
   value: string
@@ -5,61 +27,59 @@ export interface FormElementOption {
 
 export interface FormElementValidation {
   required?: boolean
-  min?: number
-  max?: number
   minLength?: number
   maxLength?: number
   pattern?: string
+  minimum?: number
+  maximum?: number
+  multipleOf?: number
+  minItems?: number
+  maxItems?: number
 }
 
-export interface UiSchema {
-  'ui:widget'?: string
-  'ui:options'?: {
-    inline?: boolean
-    rows?: number
-    accept?: string
-    format?: string
-  }
-  'ui:order'?: string[]
-  'ui:disabled'?: boolean
-  'ui:readonly'?: boolean
-  'ui:description'?: string
-  'ui:placeholder'?: string
-  'ui:autocomplete'?: string
-  'ui:autofocus'?: boolean
-  'ui:enumDisabled'?: string[]
-  classNames?: string
-  'ui:before'?: string
-  'ui:after'?: string
-  'ui:hideLabel'?: boolean
+export interface FormElementUi {
+  hideLabel?: boolean
+  disabled?: boolean
+  readonly?: boolean
+  autofocus?: boolean
+  inline?: boolean
+  rows?: number
+  accept?: string
 }
 
 export interface FormElement {
-  type: 'text' | 'number' | 'checkbox' | 'radio' | 'select' | 'textarea' | 'date' | 'time' | 'file'
-  label: string
+  id: string
+  type: FieldType
   name: string
+  label: string
+  description?: string
   placeholder?: string
+  help?: string
+  defaultValue?: FieldValue
   options?: FormElementOption[]
-  validation?: FormElementValidation
-  uiSchema?: UiSchema
+  validation: FormElementValidation
+  ui: FormElementUi
 }
 
+export interface FormMeta {
+  title: string
+  description: string
+}
+
+export interface FormState {
+  meta: FormMeta
+  elements: FormElement[]
+}
+
+export type JsonSchemaProperty = Record<string, unknown>
+
 export interface JsonSchema {
+  $schema?: string
   type: 'object'
-  properties: {
-    [key: string]: {
-      type: string
-      title: string
-      description?: string
-      enum?: string[]
-      format?: string
-      minLength?: number
-      maxLength?: number
-      minimum?: number
-      maximum?: number
-      pattern?: string
-    }
-  }
+  title?: string
+  description?: string
+  properties: Record<string, JsonSchemaProperty>
   required?: string[]
 }
 
+export type UiSchema = Record<string, unknown>

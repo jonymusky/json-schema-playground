@@ -1,14 +1,13 @@
 "use client"
 
-import React, { createContext, useContext, useState } from "react"
-import { cn } from "@/lib/utils" // Ensure this utility is implemented
+import React, { createContext, useCallback, useContext, useState } from "react"
+import { cn } from "@/lib/utils"
 import { X } from "lucide-react"
 
-// Toast context types
 interface Toast {
   id: string
   title: string
-  description: string
+  description?: string
   variant?: "default" | "destructive"
 }
 
@@ -26,43 +25,43 @@ export const useToast = () => {
   return context
 }
 
-// Toast provider
 export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  const toast = (newToast: Omit<Toast, "id">) => {
-    const id = Math.random().toString(36).substring(2, 9) // Generate a random ID
-    setToasts((prev) => [...prev, { id, ...newToast }])
-    setTimeout(() => removeToast(id), 5000) // Auto-dismiss after 5 seconds
-  }
-
-  const removeToast = (id: string) => {
+  const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
-  }
+  }, [])
+
+  const toast = useCallback(
+    (newToast: Omit<Toast, "id">) => {
+      const id = Math.random().toString(36).substring(2, 9)
+      setToasts((prev) => [...prev.slice(-2), { id, ...newToast }])
+      setTimeout(() => removeToast(id), 4000)
+    },
+    [removeToast]
+  )
 
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col space-y-2">
+      <div aria-live="polite" className="pointer-events-none fixed bottom-14 right-4 z-50 flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2">
         {toasts.map(({ id, title, description, variant = "default" }) => (
           <div
             key={id}
+            role="status"
             className={cn(
-              "relative flex items-start p-4 rounded-md shadow-lg",
-              variant === "destructive"
-                ? "bg-red-600 text-white"
-                : "bg-gray-800 text-white"
+              "pointer-events-auto relative rounded-lg border bg-popover py-3 pl-4 pr-10 text-popover-foreground shadow-lg animate-in fade-in slide-in-from-bottom-2",
+              variant === "destructive" && "border-destructive/50"
             )}
           >
-            <div className="flex-1">
-              <h4 className="text-sm font-semibold">{title}</h4>
-              <p className="text-sm">{description}</p>
-            </div>
+            <p className={cn("text-sm font-semibold", variant === "destructive" && "text-destructive")}>{title}</p>
+            {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
             <button
               onClick={() => removeToast(id)}
-              className="absolute top-2 right-2 text-white hover:text-gray-300 focus:outline-none"
+              className="absolute right-2 top-2 rounded p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <X className="w-4 h-4" />
+              <X className="h-4 w-4" />
+              <span className="sr-only">Dismiss</span>
             </button>
           </div>
         ))}
